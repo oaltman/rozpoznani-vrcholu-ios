@@ -1,81 +1,87 @@
 'use strict';
 
 var React = require('react-native');
-var Kefir = require('kefir');
-var Model = require('./app/model');
+var {StyleSheet,AppRegistry, View, Text} = React;
+var {createStore} = require('redux');
 
-var hills = [
-  ["Chlup", 2.3, 4.5]
-];
+var Model = require('./app/models/model');
+var HillsModel = require('./app/models/hills-model');
+var CommunicationModel = require('./app/models/communication-model');
+
+var Compass = require('./app/components/compass');
+var Location = require('./app/components/location');
+var Gps = require('./app/components/gps');
+var Found = require('./app/components/found');
+var Hill = require('./app/components/hill');
+
+var reducers = require('./app/reducers/top-reducer');
+
+let store = createStore(reducers);
+var compute = require('./app/models/compute')(store);
 
 
-var {
-  AppRegistry,
-  StyleSheet,
-  Text,
-  View,
-  Image,
-} = React;
+//const logUpdates = () => {
+//	console.log(store.getState());
+//};
 
-var LocationModel = Model();
+var LocationModel = Model(store);
+var HillsModel = HillsModel(store);
+var CommunicationModel = CommunicationModel(store, LocationModel);
+HillsModel.fetch();
 
-var WhatTheHill = React.createClass({
+CommunicationModel.initializeConnection();
 
-  getInitialState: function() {
-    return {
-      text: "Foo",
-      rotation: 0
-    };
-  },
+//store.subscribe(logUpdates);
+store.subscribe(compute.computeAll);
 
-  componentDidMount: function() {
-    LocationModel.start();
-    LocationModel.attachListener( (data)  =>
-      this.setState({
-        rotation: -data.heading
-      }));
-  },
+let TopLevelComponent = React.createClass({
 
-  componentWillUnmount: function() {
-    LocationModel.stop();
-  },
+	getInitialState: function () {
+		return {
+			heading: 0,
+			location: {},
+			hills: []
+		}
+	},
 
-  render: function() {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.welcome}>
-          {this.state.text}
-        </Text>
-        <Image
-          source={{ uri: 'http://screen.ondrejaltman.eu/0fc56cc2ad23d71edb7322af89c3e7b1e062ac01.png' }}
-          style={{ width: 400,
-                   height: 400,
-                   flex: 0.8,
-                   transform: [ {rotate: this.state.rotation + "deg"} ]
-                 }} />
-        <Text>{this.state.heading}</Text>
-      </View>
-    );
-  }
+	componentDidMount: function ()  {
+		store.subscribe(() => {
+			this.setState({
+				heading: store.getState()['heading'],
+				location: store.getState()['location'],
+				hills: store.getState()['hills']
+			});
+		});
+		LocationModel.start();
+	},
+
+	render: function () {
+		let hills = compute.computeAll();
+
+		return (
+				<View style={styles.main}>
+					<Found hills={hills} />
+					<Location>
+						<Gps longitude={this.state.location.longitude} latitude={this.state.location.latitude} />
+						<Compass heading={this.state.heading}/>
+					</Location>
+				</View>
+		)
+	}
+});
+//{this.state.hills.map(([name, lat, long]) => {
+//	return (<Hill name={name} latitude={lat} longitude={long} />);
+//})}
+let styles = StyleSheet.create({
+	main: {
+		flex: 1,
+		flexDirection: 'column',
+		justifyContent: 'flex-end'
+	},
+	link: {
+		fontSize: 20
+	}
 });
 
-var styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5FCFF'
-  },
-  welcome: {
-    fontSize: 20,
-    textAlign: 'center',
-    margin: 10
-  },
-  instructions: {
-    textAlign: 'center',
-    color: '#333333',
-    marginBottom: 5
-  }
-});
 
-AppRegistry.registerComponent('WhatTheHill', () => WhatTheHill);
+AppRegistry.registerComponent('WhatTheHill', () => TopLevelComponent);
